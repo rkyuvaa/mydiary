@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Diary - Personal Journal and Task Manager</title>
+  <meta name="description" content="A personal diary and task manager with AI-powered task extraction, folder organization, and reminders." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sidebar-bg:#1C3229;--sidebar-hover:#243d30;--sidebar-active:#2e5040;--sidebar-border:#2a4538;
+  --accent:#3d7a5a;--accent-light:#4e9b72;
+  --bg:#faf8f5;--bg-card:#ffffff;--bg-hover:#f4f1ec;
+  --text:#2d2d2d;--text-muted:#7a7a7a;--text-light:#b0b0b0;
+  --border:#e8e3da;--border-light:#f0ece4;
+  --shadow:0 2px 12px rgba(0,0,0,0.07);--shadow-md:0 4px 24px rgba(0,0,0,0.10);
+  --radius:10px;--radius-sm:6px;--radius-lg:14px;
+  --font-sans:"Inter",system-ui,sans-serif;--font-serif:"Merriweather",Georgia,serif;
+  --tag-task:#3b82f6;--tag-reminder:#f59e0b;--tag-waiting:#8b5cf6;--tag-someday:#6b7280;
+}
+html,body,#root{height:100%;font-family:var(--font-sans);background:var(--bg);color:var(--text);overflow:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.app{display:grid;grid-template-columns:240px 1fr 320px;height:100vh;overflow:hidden}
+.sidebar{background:var(--sidebar-bg);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--sidebar-border)}
+.sidebar-header{padding:22px 18px 16px;border-bottom:1px solid var(--sidebar-border)}
+.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent-light),var(--accent));border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;flex-shrink:0;box-shadow:0 2px 8px rgba(61,122,90,0.4)}
+.sidebar-logo h1{font-size:17px;font-weight:700;color:#e8f3ed;letter-spacing:-0.3px}
+.sidebar-logo p{font-size:10px;color:#7aaa8e;font-weight:400;letter-spacing:0.5px;text-transform:uppercase}
+.sidebar-date{font-size:11px;color:#7aaa8e;margin-top:10px;font-weight:500;display:flex;align-items:center;gap:4px}
+.sidebar-section{padding:10px 10px 4px}
+.sidebar-section-label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#4d7a62;padding:0 8px;margin-bottom:4px}
+.sidebar-scroll{flex:1;overflow-y:auto;padding-bottom:10px}
+.folder-item{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:8px;margin:1px 8px;cursor:pointer;transition:background 0.15s,color 0.15s;color:#a8c9b5;font-size:13.5px;user-select:none}
+.folder-item:hover{background:var(--sidebar-hover);color:#d4ede0}
+.folder-item.active{background:var(--sidebar-active);color:#e8f3ed;font-weight:500}
+.fi-icon{font-size:16px;flex-shrink:0;opacity:0.8}
+.folder-item.active .fi-icon{opacity:1}
+.fi-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folder-badge{background:rgba(78,155,114,0.25);color:#7acd9e;font-size:10px;font-weight:600;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0}
+.folder-badge.ab{background:var(--accent-light);color:#fff}
+.sidebar-add-folder{margin:6px 18px;display:flex;gap:6px}
+.sidebar-add-folder input{flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#d4ede0;font-size:12px;padding:6px 10px;font-family:var(--font-sans);outline:none}
+.sidebar-add-folder input::placeholder{color:#4d7a62}
+.sidebar-add-folder input:focus{border-color:rgba(255,255,255,0.25)}
+.sidebar-add-folder button{width:28px;height:28px;background:var(--accent);border:none;border-radius:6px;cursor:pointer;color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sidebar-add-folder button:hover{background:var(--accent-light)}
+.sidebar-footer{padding:12px 18px;border-top:1px solid var(--sidebar-border);font-size:11px;color:#4d7a62;text-align:center}
+.diary{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.diary-header{padding:20px 28px 14px;border-bottom:1px solid var(--border-light);background:var(--bg-card);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0}
+.diary-header-left h2{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-0.4px}
+.diary-meta{display:flex;align-items:center;gap:8px;margin-top:4px}
+.diary-meta-tag{font-size:11px;font-weight:600;color:var(--accent);background:rgba(61,122,90,0.1);border-radius:4px;padding:2px 7px;display:flex;align-items:center;gap:3px}
+.diary-meta-date{font-size:12px;color:var(--text-muted)}
+.diary-header-actions{display:flex;gap:8px;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all 0.15s;font-family:var(--font-sans);white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-light)}
+.btn-primary:active{transform:scale(0.98)}
+.btn-ai{background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff}
+.btn-ai:hover{background:linear-gradient(135deg,#7c3aed,#6366f1)}
+.btn-ai:active{transform:scale(0.98)}
+.btn-ghost{background:transparent;color:var(--text-muted);padding:6px 10px}
+.btn-ghost:hover{background:var(--bg-hover);color:var(--text)}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn:disabled{opacity:0.55;cursor:not-allowed;transform:none!important}
+.search-bar{padding:10px 28px;border-bottom:1px solid var(--border-light);background:var(--bg-card);flex-shrink:0}
+.search-wrap{display:flex;align-items:center;gap:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;transition:border-color 0.15s}
+.search-wrap:focus-within{border-color:var(--accent)}
+.search-wrap .si{color:var(--text-light);font-size:15px;flex-shrink:0}
+.search-input{flex:1;border:none;background:transparent;outline:none;font-size:13px;color:var(--text);font-family:var(--font-sans)}
+.search-input::placeholder{color:var(--text-light)}
+.search-clear{background:transparent;border:none;cursor:pointer;color:var(--text-light);display:flex;align-items:center;padding:2px}
+.search-clear:hover{color:var(--text)}
+.diary-body{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+.compose{background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)}
+.compose:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(61,122,90,0.1)}
+.compose-bar{display:flex;align-items:center;gap:4px;padding:8px 12px;border-bottom:1px solid var(--border-light);background:var(--bg-hover)}
+.tbtn{width:28px;height:28px;border:none;background:transparent;border-radius:4px;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:14px}
+.tbtn:hover{background:var(--border);color:var(--text)}
+.sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+.mood-row{display:flex;align-items:center;gap:5px;margin-left:auto}
+.mood-lbl{font-size:11px;color:var(--text-muted)}
+.mood-btn{width:26px;height:26px;border:1.5px solid transparent;border-radius:50%;background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all 0.12s}
+.mood-btn:hover{transform:scale(1.2)}
+.mood-btn.sel{border-color:var(--accent);background:rgba(61,122,90,0.08)}
+.compose-ta{width:100%;min-height:180px;padding:16px 18px;border:none;outline:none;font-family:var(--font-serif);font-size:15px;line-height:1.75;color:var(--text);background:var(--bg-card);resize:none}
+.compose-ta::placeholder{color:#c8c0b0;font-style:italic}
+.compose-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border-light);background:var(--bg-hover)}
+.foot-left{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-light)}
+.wc{background:rgba(61,122,90,0.1);color:var(--accent);border-radius:4px;font-size:10px;padding:1px 6px;font-weight:600}
+.foot-right{display:flex;align-items:center;gap:8px}
+@keyframes pd{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
+.dots{display:inline-flex;align-items:center;gap:4px}
+.dots span{width:5px;height:5px;background:currentColor;border-radius:50%;display:inline-block;animation:pd 1.4s infinite ease-in-out}
+.dots span:nth-child(2){animation-delay:0.2s}
+.dots span:nth-child(3){animation-delay:0.4s}
+.ai-res{padding:5px 10px;border-radius:6px;font-size:12px;font-weight:500;display:flex;align-items:center}
+.ai-res.success{background:rgba(34,197,94,0.1);color:#15803d;border:1px solid rgba(34,197,94,0.2)}
+.ai-res.error{background:rgba(239,68,68,0.1);color:#b91c1c;border:1px solid rgba(239,68,68,0.2)}
+.ai-res.info{background:rgba(99,102,241,0.1);color:#4f46e5;border:1px solid rgba(99,102,241,0.2)}
+.api-box{background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;box-shadow:var(--shadow)}
+.api-box label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px}
+.api-row{display:flex;gap:8px}
+.api-in{flex:1;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;font-family:monospace;color:var(--text);background:var(--bg);outline:none}
+.api-in:focus{border-color:var(--accent)}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sec-title{font-size:13px;font-weight:600;color:var(--text-muted);letter-spacing:0.5px;text-transform:uppercase}
+.sec-count{font-size:11px;color:var(--text-muted)}
+.entries-list{display:flex;flex-direction:column;gap:10px}
+.entry-card{background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:all 0.15s;box-shadow:var(--shadow);position:relative}
+.entry-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(61,122,90,0.12);transform:translateY(-1px)}
+.ec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.ec-date{font-size:11px;font-weight:600;color:var(--accent)}
+.ec-folder{font-size:10px;color:var(--text-muted);background:var(--bg-hover);border-radius:4px;padding:2px 6px;display:flex;align-items:center;gap:3px}
+.ec-preview{font-size:13px;color:var(--text-muted);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ec-del{position:absolute;top:8px;right:8px;width:24px;height:24px;border:none;background:rgba(239,68,68,0.1);border-radius:4px;cursor:pointer;color:#ef4444;display:none;align-items:center;justify-content:center;font-size:13px}
+.entry-card:hover .ec-del{display:flex}
+.ec-del:hover{background:rgba(239,68,68,0.2)}
+.empty{text-align:center;padding:40px 20px;color:var(--text-light)}
+.empty-icon{font-size:40px;margin-bottom:12px;display:block;opacity:0.4}
+.empty p{font-size:14px}
+.tasks-panel{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.tasks-hdr{padding:20px 20px 14px;border-bottom:1px solid var(--border-light);background:var(--bg-card);flex-shrink:0}
+.tasks-hdr h3{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.tot-badge{background:var(--accent);color:#fff;font-size:11px;font-weight:600;border-radius:99px;padding:1px 7px}
+.ftabs{display:flex;gap:4px;flex-wrap:wrap}
+.ftab{padding:5px 11px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);transition:all 0.15s;font-family:var(--font-sans)}
+.ftab:hover{border-color:var(--accent);color:var(--accent)}
+.ftab.act{background:var(--accent);border-color:var(--accent);color:#fff}
+.ftab.ft.act{background:var(--tag-task);border-color:var(--tag-task)}
+.ftab.fr.act{background:var(--tag-reminder);border-color:var(--tag-reminder)}
+.ftab.fw.act{background:var(--tag-waiting);border-color:var(--tag-waiting)}
+.ftab.fs.act{background:var(--tag-someday);border-color:var(--tag-someday)}
+.tasks-body{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+@keyframes si{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+.task-item{background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--radius);padding:11px 12px;display:flex;align-items:flex-start;gap:10px;box-shadow:var(--shadow);position:relative;animation:si 0.2s ease-out}
+.task-item:hover{box-shadow:var(--shadow-md)}
+.task-item.done{opacity:0.55;background:var(--bg-hover)}
+.task-chk{width:17px;height:17px;border:2px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;flex-shrink:0;margin-top:1px;appearance:none;-webkit-appearance:none;transition:all 0.15s;position:relative}
+.task-chk:checked{background:var(--accent);border-color:var(--accent)}
+.task-chk:checked::after{content:"";position:absolute;width:4px;height:7px;border:2px solid #fff;border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-1px);top:1px;left:3px}
+.task-chk:hover{border-color:var(--accent)}
+.task-content{flex:1;min-width:0}
+.task-txt{font-size:13px;color:var(--text);line-height:1.5;word-break:break-word}
+.task-item.done .task-txt{text-decoration:line-through;color:var(--text-light)}
+.task-meta{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap}
+.tbadge{font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;letter-spacing:0.5px;text-transform:uppercase}
+.tbadge.TASK{background:rgba(59,130,246,0.12);color:var(--tag-task)}
+.tbadge.REMINDER{background:rgba(245,158,11,0.12);color:var(--tag-reminder)}
+.tbadge.WAITING{background:rgba(139,92,246,0.12);color:var(--tag-waiting)}
+.tbadge.SOMEDAY{background:rgba(107,114,128,0.12);color:var(--tag-someday)}
+.task-folder{font-size:10px;color:var(--text-muted);background:var(--bg-hover);border-radius:4px;padding:1px 6px;display:flex;align-items:center;gap:3px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-date{font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:3px}
+.task-del{width:24px;height:24px;border:none;background:rgba(239,68,68,0.08);border-radius:4px;cursor:pointer;color:#ef4444;display:none;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.task-item:hover .task-del{display:flex}
+.task-del:hover{background:rgba(239,68,68,0.18)}
+.divider{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-light);font-weight:500;margin:4px 0}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
+.toasts{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:var(--text);color:#fff;font-size:13px;font-weight:500;padding:11px 16px;border-radius:var(--radius);box-shadow:var(--shadow-md);display:flex;align-items:center;gap:8px;pointer-events:auto;animation:tai 0.25s ease-out;max-width:300px}
+.toast.success{background:#15803d}.toast.error{background:#b91c1c}.toast.info{background:#4f46e5}
+@keyframes tai{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tao{from{opacity:1}to{opacity:0;transform:translateY(12px)}}
+.toast.out{animation:tao 0.2s ease-in forwards}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9000;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--bg-card);border-radius:var(--radius-lg);padding:24px;max-width:380px;width:90%;box-shadow:var(--shadow-md)}
+.modal h4{font-size:16px;font-weight:700;margin-bottom:8px}
+.modal p{font-size:13.5px;color:var(--text-muted);line-height:1.5;margin-bottom:18px}
+.modal-acts{display:flex;gap:8px;justify-content:flex-end}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo} = React;
+const SK = 'diary-state';
+const MOODS = ['😊','😐','😔','😤','🤩','😴'];
+const DEF_FOLDERS = [
+  {id:'all',      name:'All Entries',     icon:'ti-books'},
+  {id:'kim-erp',  name:'KIM ERP Dev',      icon:'ti-code'},
+  {id:'kim-biz',  name:'KIM Business Ops', icon:'ti-briefcase'},
+  {id:'sri-varu', name:'Sri Varu Motors',  icon:'ti-car'},
+  {id:'personal', name:'Personal',          icon:'ti-user'},
+  {id:'ideas',    name:'Ideas',             icon:'ti-bulb'},
+];
+const uid = () => Math.random().toString(36).slice(2,10);
+const todayLbl = () => new Date().toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+const fmtDate = iso => { const d=new Date(iso); return isNaN(d)?iso:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
+const fmtShort = iso => { const d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}); };
+const loadSt = () => { try{const r=localStorage.getItem(SK);return r?JSON.parse(r):null;}catch{return null;} };
+const saveSt = s => { try{localStorage.setItem(SK,JSON.stringify(s));}catch{} };
+
+function useToast(){
+  const [toasts,setToasts]=useState([]);
+  const show=useCallback((msg,type='success',icon='ti-check')=>{
+    const id=uid();
+    setToasts(p=>[...p,{id,msg,type,icon}]);
+    setTimeout(()=>{
+      setToasts(p=>p.map(t=>t.id===id?{...t,out:true}:t));
+      setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),220);
+    },3000);
+  },[]);
+  return {toasts,show};
+}
+
+function App(){
+  const sv=loadSt();
+  const [folders,setFolders]=useState(sv?.folders||DEF_FOLDERS);
+  const [entries,setEntries]=useState(sv?.entries||[]);
+  const [tasks,setTasks]=useState(sv?.tasks||[]);
+  const [activeFolder,setActiveFolder]=useState(sv?.activeFolder||'all');
+  const [entryText,setEntryText]=useState('');
+  const [entryMood,setEntryMood]=useState('');
+  const [newFolder,setNewFolder]=useState('');
+  const [taskFilter,setTaskFilter]=useState('All');
+  const [apiKey,setApiKey]=useState(sv?.apiKey||'');
+  const [showApiKey,setShowApiKey]=useState(false);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiResult,setAiResult]=useState(null);
+  const [search,setSearch]=useState('');
+  const [editingId,setEditingId]=useState(null);
+  const [confirmDel,setConfirmDel]=useState(null);
+  const {toasts,show}=useToast();
+  const taRef=useRef(null);
+
+  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,apiKey}),[folders,entries,tasks,activeFolder,apiKey]);
+
+  const pendingByFolder=useMemo(()=>{
+    const c={};
+    folders.forEach(f=>{c[f.id]=tasks.filter(t=>!t.done&&(f.id==='all'||t.folderId===f.id)).length;});
+    return c;
+  },[tasks,folders]);
+
+  const afo=folders.find(f=>f.id===activeFolder)||folders[0];
+
+  const filtEntries=useMemo(()=>{
+    let list=activeFolder==='all'?entries:entries.filter(e=>e.folderId===activeFolder);
+    if(search.trim()){const q=search.toLowerCase();list=list.filter(e=>e.text.toLowerCase().includes(q));}
+    return list.sort((a,b)=>b.createdAt-a.createdAt).slice(0,10);
+  },[entries,activeFolder,search]);
+
+  const filtTasks=useMemo(()=>{
+    let list=taskFilter==='All'?tasks:tasks.filter(t=>t.tag===taskFilter.toUpperCase());
+    return {pending:list.filter(t=>!t.done).sort((a,b)=>b.createdAt-a.createdAt),done:list.filter(t=>t.done).sort((a,b)=>b.createdAt-a.createdAt)};
+  },[tasks,taskFilter]);
+
+  const totPending=tasks.filter(t=>!t.done).length;
+
+  function saveEntry(){
+    const text=entryText.trim();
+    if(!text){show('Write something first!','error','ti-alert-circle');return;}
+    const fid=activeFolder==='all'?'personal':activeFolder;
+    if(editingId){
+      setEntries(p=>p.map(e=>e.id===editingId?{...e,text,mood:entryMood,updatedAt:Date.now()}:e));
+      show('Entry updated!','success','ti-check');setEditingId(null);
+    }else{
+      setEntries(p=>[{id:uid(),text,mood:entryMood,folderId:fid,createdAt:Date.now()},...p]);
+      show('Entry saved!','success','ti-check');
+    }
+    setEntryText('');setEntryMood('');setAiResult(null);
+  }
+
+  function loadEntry(e){
+    setEntryText(e.text);setEntryMood(e.mood||'');setEditingId(e.id);setAiResult(null);
+    taRef.current?.focus();
+  }
+  function cancelEdit(){setEntryText('');setEntryMood('');setEditingId(null);setAiResult(null);}
+  function delEntry(id){setConfirmDel({type:'entry',id,msg:'Delete this diary entry? This cannot be undone.'});}
+  function delTask(id){setTasks(p=>p.filter(t=>t.id!==id));show('Task removed','info','ti-trash');}
+  function toggleTask(id){setTasks(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));}
+  function addFolder(){
+    const name=newFolder.trim();if(!name)return;
+    setFolders(p=>[...p,{id:'c-'+uid(),name,icon:'ti-folder'}]);
+    setNewFolder('');show(`Folder "${name}" created`,'success','ti-folder-plus');
+  }
+  function doConfirm(){
+    if(!confirmDel)return;
+    if(confirmDel.type==='entry'){setEntries(p=>p.filter(e=>e.id!==confirmDel.id));show('Entry deleted','info','ti-trash');}
+    setConfirmDel(null);
+  }
+
+  async function extractAI(){
+    const text=entryText.trim();
+    if(!text){show('Write an entry first!','error','ti-alert-circle');return;}
+    if(!apiKey.trim()){show('Enter your Claude API key first','error','ti-key');return;}
+    const fid=activeFolder==='all'?'personal':activeFolder;
+    const fname=(folders.find(f=>f.id===fid)||{}).name||fid;
+    setAiLoading(true);setAiResult(null);
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey.trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',max_tokens:1024,
+          system:'You are a task extraction assistant. Extract actionable items from a diary entry and return ONLY a valid JSON array with no extra text. Each item: {"text":string,"tag":"TASK"|"REMINDER"|"WAITING"|"SOMEDAY","date":string|null}. date is ISO date if mentioned, else null.',
+          messages:[{role:'user',content:'Extract tasks from this diary entry:\n\n'+text}]
+        })
+      });
+      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${res.status}`);}
+      const data=await res.json();
+      const raw=(data.content?.[0]?.text||'[]').replace(/```json?/g,'').replace(/```/g,'').trim();
+      let extracted;
+      try{extracted=JSON.parse(raw);if(!Array.isArray(extracted))throw new Error();}
+      catch{throw new Error('AI returned unexpected format');}
+      if(extracted.length===0){
+        setAiResult({type:'info',msg:'No tasks found.'});show('No tasks found','info','ti-search');
+      }else{
+        const newT=extracted.map(it=>({
+          id:uid(),text:it.text,
+          tag:['TASK','REMINDER','WAITING','SOMEDAY'].includes(it.tag)?it.tag:'TASK',
+          date:it.date||null,folderId:fid,folderName:fname,done:false,createdAt:Date.now()
+        }));
+        setTasks(p=>[...newT,...p]);
+        setAiResult({type:'success',msg:`Extracted ${extracted.length} item${extracted.length>1?'s':''}`});
+        show(`${extracted.length} task${extracted.length>1?'s':''} extracted!`,'success','ti-sparkles');
+      }
+    }catch(err){setAiResult({type:'error',msg:err.message});show(err.message,'error','ti-alert-circle');}
+    finally{setAiLoading(false);}
+  }
+
+  const wc=entryText.trim()?entryText.trim().split(/\s+/).length:0;
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <div className="logo-icon"><i className="ti ti-notebook"></i></div>
+            <div><h1>My Diary</h1><p>Personal Journal</p></div>
+          </div>
+          <div className="sidebar-date"><i className="ti ti-calendar-event"></i>{todayLbl()}</div>
+        </div>
+        <div className="sidebar-scroll">
+          <div className="sidebar-section"><div className="sidebar-section-label">Folders</div></div>
+          {folders.map(f=>{
+            const cnt=pendingByFolder[f.id]||0;const ia=activeFolder===f.id;
+            return(
+              <div key={f.id} className={`folder-item${ia?' active':''}`}
+                onClick={()=>{setActiveFolder(f.id);setSearch('');}} id={`folder-${f.id}`}>
+                <i className={`ti ${f.icon} fi-icon`}></i>
+                <span className="fi-name">{f.name}</span>
+                {cnt>0&&<span className={`folder-badge${ia?' ab':''}`}>{cnt}</span>}
+              </div>
+            );
+          })}
+          <div className="sidebar-section" style={{marginTop:12}}><div className="sidebar-section-label">New Folder</div></div>
+          <div className="sidebar-add-folder">
+            <input type="text" placeholder="Folder name…" value={newFolder}
+              onChange={e=>setNewFolder(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addFolder()}
+              maxLength={32} id="new-folder-input"/>
+            <button onClick={addFolder} id="add-folder-btn"><i className="ti ti-plus"></i></button>
+          </div>
+        </div>
+        <div className="sidebar-footer">{entries.length} entries · {tasks.filter(t=>!t.done).length} pending</div>
+      </aside>
+
+      <main className="diary">
+        <div className="diary-header">
+          <div className="diary-header-left">
+            <h2>{editingId?'Editing Entry':'New Entry'}</h2>
+            <div className="diary-meta">
+              <span className="diary-meta-tag"><i className={`ti ${afo.icon}`} style={{fontSize:11}}></i>{afo.name}</span>
+              <span className="diary-meta-date">{todayLbl()}</span>
+            </div>
+          </div>
+          <div className="diary-header-actions">
+            {!showApiKey
+              ?<button className="btn btn-ghost" onClick={()=>setShowApiKey(true)} id="show-api-btn"><i className="ti ti-key"></i>AI Setup</button>
+              :<button className="btn btn-ghost" onClick={()=>setShowApiKey(false)} id="hide-api-btn"><i className="ti ti-x"></i>Close</button>
+            }
+          </div>
+        </div>
+        <div className="search-bar">
+          <div className="search-wrap">
+            <i className="ti ti-search si"></i>
+            <input className="search-input" placeholder="Search entries…" value={search}
+              onChange={e=>setSearch(e.target.value)} id="search-input"/>
+            {search&&<button className="search-clear" onClick={()=>setSearch('')}><i className="ti ti-x"></i></button>}
+          </div>
+        </div>
+        <div className="diary-body">
+          {showApiKey&&(
+            <div className="api-box">
+              <label><i className="ti ti-robot"></i>Claude API Key</label>
+              <div className="api-row">
+                <input id="api-key-input" type="password" className="api-in" placeholder="sk-ant-api03-…"
+                  value={apiKey} onChange={e=>setApiKey(e.target.value)}/>
+                <button className="btn btn-primary" id="save-api-btn"
+                  onClick={()=>{saveSt({folders,entries,tasks,activeFolder,apiKey});setShowApiKey(false);show('API key saved','success','ti-check');}}>
+                  <i className="ti ti-device-floppy"></i>Save
+                </button>
+              </div>
+              <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>Stored locally in your browser only. Used for AI task extraction.</p>
+            </div>
+          )}
+          <div className="compose">
+            <div className="compose-bar">
+              <button className="tbtn" title="Bold"><i className="ti ti-bold"></i></button>
+              <button className="tbtn" title="Italic"><i className="ti ti-italic"></i></button>
+              <button className="tbtn" title="List"><i className="ti ti-list"></i></button>
+              <div className="sep"></div>
+              <button className="tbtn" title="Photo"><i className="ti ti-photo"></i></button>
+              <button className="tbtn" title="Link"><i className="ti ti-link"></i></button>
+              <div className="mood-row">
+                <span className="mood-lbl">Mood:</span>
+                {MOODS.map(m=>(
+                  <button key={m} className={`mood-btn${entryMood===m?' sel':''}`}
+                    onClick={()=>setEntryMood(p=>p===m?'':m)} title={m}>{m}</button>
+                ))}
+              </div>
+            </div>
+            <textarea ref={taRef} className="compose-ta"
+              placeholder="What's on your mind today? Pour your thoughts, ideas, plans…"
+              value={entryText} onChange={e=>setEntryText(e.target.value)} id="entry-textarea" rows={8}/>
+            <div className="compose-foot">
+              <div className="foot-left">
+                <span>{entryText.length} chars</span>
+                {wc>0&&<span className="wc">{wc} words</span>}
+              </div>
+              <div className="foot-right">
+                {aiResult&&<div className={`ai-res ${aiResult.type}`}>{aiResult.msg}</div>}
+                {editingId&&<button className="btn btn-ghost" onClick={cancelEdit} id="cancel-edit-btn">Cancel</button>}
+                <button className="btn btn-ai" onClick={extractAI} disabled={aiLoading||!entryText.trim()} id="extract-ai-btn">
+                  {aiLoading?<span className="dots"><span></span><span></span><span></span></span>:<i className="ti ti-sparkles"></i>}
+                  {aiLoading?'Extracting…':'Extract Tasks'}
+                </button>
+                <button className="btn btn-primary" onClick={saveEntry} disabled={!entryText.trim()} id="save-entry-btn">
+                  <i className="ti ti-device-floppy"></i>{editingId?'Update':'Save Entry'}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="sec-hdr">
+              <span className="sec-title">{search?'Search Results':'Recent Entries'}</span>
+              <span className="sec-count">{filtEntries.length} {filtEntries.length===1?'entry':'entries'}</span>
+            </div>
+            {filtEntries.length===0?(
+              <div className="empty"><i className="ti ti-notebook-off empty-icon"></i><p>{search?'No matching entries':'No entries yet. Start writing!'}</p></div>
+            ):(
+              <div className="entries-list">
+                {filtEntries.map(entry=>{
+                  const fo=folders.find(f=>f.id===entry.folderId);
+                  return(
+                    <div key={entry.id} className="entry-card" onClick={()=>loadEntry(entry)} id={`entry-${entry.id}`}>
+                      <div className="ec-hdr">
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span className="ec-date">{fmtDate(new Date(entry.createdAt).toISOString())}</span>
+                          {entry.mood&&<span style={{fontSize:13}}>{entry.mood}</span>}
+                        </div>
+                        <span className="ec-folder"><i className={`ti ${fo?.icon||'ti-folder'}`}></i>{fo?.name||'?'}</span>
+                      </div>
+                      <p className="ec-preview">{entry.text}</p>
+                      <button className="ec-del" onClick={e=>{e.stopPropagation();delEntry(entry.id);}} id={`del-entry-${entry.id}`}><i className="ti ti-trash"></i></button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      <aside className="tasks-panel">
+        <div className="tasks-hdr">
+          <h3><i className="ti ti-checklist" style={{color:'var(--accent)'}}></i>Tasks &amp; Reminders{totPending>0&&<span className="tot-badge">{totPending}</span>}</h3>
+          <div className="ftabs">
+            {[['All',''],['Task','ft'],['Reminder','fr'],['Waiting','fw'],['Someday','fs']].map(([lbl,cls])=>(
+              <button key={lbl} className={`ftab${cls?' '+cls:''} ${taskFilter===lbl?'act':''}`}
+                onClick={()=>setTaskFilter(lbl)} id={`filter-${lbl.toLowerCase()}`}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        <div className="tasks-body">
+          {filtTasks.pending.length===0&&filtTasks.done.length===0?(
+            <div className="empty"><i className="ti ti-clipboard-off empty-icon"></i><p>No tasks yet. Use "Extract Tasks" to pull items from your entries!</p></div>
+          ):(
+            <>
+              {filtTasks.pending.map(t=><TaskItem key={t.id} task={t} folders={folders} onToggle={toggleTask} onDelete={delTask}/>)}
+              {filtTasks.done.length>0&&<><div className="divider">Completed</div>{filtTasks.done.map(t=><TaskItem key={t.id} task={t} folders={folders} onToggle={toggleTask} onDelete={delTask}/>)}</>}
+            </>
+          )}
+        </div>
+      </aside>
+
+      <div className="toasts">
+        {toasts.map(t=><div key={t.id} className={`toast ${t.type}${t.out?' out':''}`}><i className={`ti ${t.icon}`}></i>{t.msg}</div>)}
+      </div>
+
+      {confirmDel&&(
+        <div className="overlay" onClick={()=>setConfirmDel(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h4>Confirm Delete</h4>
+            <p>{confirmDel.msg}</p>
+            <div className="modal-acts">
+              <button className="btn btn-ghost" onClick={()=>setConfirmDel(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={doConfirm} id="confirm-del-btn">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskItem({task,folders,onToggle,onDelete}){
+  const fo=folders.find(f=>f.id===task.folderId);
+  return(
+    <div className={`task-item${task.done?' done':''}`} id={`task-${task.id}`}>
+      <input type="checkbox" className="task-chk" checked={task.done} onChange={()=>onToggle(task.id)}/>
+      <div className="task-content">
+        <div className="task-txt">{task.text}</div>
+        <div className="task-meta">
+          <span className={`tbadge ${task.tag}`}>{task.tag}</span>
+          {fo&&<span className="task-folder" title={fo.name}><i className={`ti ${fo.icon}`} style={{fontSize:9}}></i>{fo.name}</span>}
+          {task.date&&<span className="task-date"><i className="ti ti-calendar" style={{fontSize:10}}></i>{fmtShort(task.date)}</span>}
+        </div>
+      </div>
+      <button className="task-del" onClick={()=>onDelete(task.id)}><i className="ti ti-trash"></i></button>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
