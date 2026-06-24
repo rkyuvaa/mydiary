@@ -102,6 +102,8 @@ html,body,#root{height:100%;font-family:var(--font-sans);background:var(--bg);co
 .wc{background:rgba(61,122,90,0.1);color:var(--accent);border-radius:4px;font-size:10px;padding:1px 6px;font-weight:600}
 .foot-right{display:flex;align-items:center;gap:8px}
 @keyframes pd{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
+@keyframes spin { 100% { transform:rotate(360deg); } }
+.spinner { animation: spin 1s linear infinite; }
 .dots{display:inline-flex;align-items:center;gap:4px}
 .dots span{width:5px;height:5px;background:currentColor;border-radius:50%;display:inline-block;animation:pd 1.4s infinite ease-in-out}
 .dots span:nth-child(2){animation-delay:0.2s}
@@ -228,7 +230,13 @@ function App(){
   const [aiProvider,setAiProvider]=useState(sv?.aiProvider||'gemini');
   const [geminiKey,setGeminiKey]=useState(sv?.geminiKey||'');
   const [claudeKey,setClaudeKey]=useState(sv?.claudeKey||sv?.apiKey||'');
+  const [githubToken,setGithubToken]=useState(sv?.githubToken||'');
+  const [githubGistId,setGithubGistId]=useState(sv?.githubGistId||'');
+  const [syncStatus,setSyncStatus]=useState('idle');
+  const [lastSyncedAt,setLastSyncedAt]=useState(sv?.lastSyncedAt||null);
   const [showApiKey,setShowApiKey]=useState(false);
+  const [showSyncSettings,setShowSyncSettings]=useState(false);
+  const [tempGithubToken,setTempGithubToken]=useState(sv?.githubToken||'');
   const [aiLoading,setAiLoading]=useState(false);
   const [aiResult,setAiResult]=useState(null);
   const [search,setSearch]=useState('');
@@ -237,7 +245,143 @@ function App(){
   const {toasts,show}=useToast();
   const taRef=useRef(null);
 
-  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey}),[folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey]);
+  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey,githubToken,githubGistId,lastSyncedAt}),[folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey,githubToken,githubGistId,lastSyncedAt]);
+
+  const syncToGithub = useCallback(async (customFolders, customEntries, customTasks) => {
+    const token = githubToken.trim();
+    const gistId = githubGistId.trim();
+    if (!token || !gistId) return;
+    setSyncStatus('syncing');
+    try {
+      const stateToSave = {
+        folders: customFolders || folders,
+        entries: customEntries || entries,
+        tasks: customTasks || tasks
+      };
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+          description: 'My Diary Backup',
+          files: {
+            'mydiary-backup.json': {
+              content: JSON.stringify(stateToSave, null, 2)
+            }
+          }
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSyncStatus('success');
+      setLastSyncedAt(Date.now());
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+      show('Sync to GitHub failed: ' + err.message, 'error', 'ti-cloud-off');
+    }
+  }, [githubToken, githubGistId, folders, entries, tasks, show]);
+
+  const initializeGithubSync = useCallback(async (tokenVal) => {
+    const token = tokenVal.trim();
+    if (!token) return;
+    setSyncStatus('syncing');
+    try {
+      const listRes = await fetch('https://api.github.com/gists', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      if (!listRes.ok) throw new Error(`Authentication failed (HTTP ${listRes.status})`);
+      const gists = await listRes.json();
+      const existingGist = gists.find(g => g.files && g.files['mydiary-backup.json']);
+
+      if (existingGist) {
+        const gistDetailRes = await fetch(`https://api.github.com/gists/${existingGist.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        if (!gistDetailRes.ok) throw new Error(`Could not fetch Gist details (HTTP ${gistDetailRes.status})`);
+        const gistDetail = await gistDetailRes.json();
+        const contentStr = gistDetail.files['mydiary-backup.json'].content;
+        let remoteState;
+        try {
+          remoteState = JSON.parse(contentStr);
+        } catch {
+          throw new Error('Invalid backup file format');
+        }
+
+        setGithubToken(token);
+        setGithubGistId(existingGist.id);
+        
+        if (remoteState && (remoteState.entries?.length || remoteState.tasks?.length || remoteState.folders?.length > DEF_FOLDERS.length)) {
+          if (confirm('An existing cloud backup was found on GitHub. Load backup data? (This will overwrite your local entries)')) {
+            if (remoteState.folders) setFolders(remoteState.folders);
+            if (remoteState.entries) setEntries(remoteState.entries);
+            if (remoteState.tasks) setTasks(remoteState.tasks);
+            show('Cloud backup restored!', 'success', 'ti-cloud-download');
+          } else {
+            setSyncStatus('idle');
+            setTimeout(() => {
+              syncToGithub(folders, entries, tasks);
+            }, 100);
+          }
+        } else {
+          setSyncStatus('idle');
+          setTimeout(() => {
+            syncToGithub(folders, entries, tasks);
+          }, 100);
+        }
+        setLastSyncedAt(Date.now());
+        setSyncStatus('success');
+      } else {
+        const stateToSave = { folders, entries, tasks };
+        const createRes = await fetch('https://api.github.com/gists', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            description: 'My Diary Backup',
+            public: false,
+            files: {
+              'mydiary-backup.json': {
+                content: JSON.stringify(stateToSave, null, 2)
+              }
+            }
+          })
+        });
+        if (!createRes.ok) throw new Error(`Gist creation failed (HTTP ${createRes.status})`);
+        const newGist = await createRes.json();
+        
+        setGithubToken(token);
+        setGithubGistId(newGist.id);
+        setLastSyncedAt(Date.now());
+        setSyncStatus('success');
+        show('GitHub Sync enabled and backup created!', 'success', 'ti-cloud-upload');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+      show('GitHub Sync failed: ' + err.message, 'error', 'ti-alert-triangle');
+    }
+  }, [folders, entries, tasks, show, syncToGithub]);
+
+  const disableGithubSync = () => {
+    setGithubToken('');
+    setGithubGistId('');
+    setTempGithubToken('');
+    setLastSyncedAt(null);
+    setSyncStatus('idle');
+    show('GitHub Sync disabled', 'info', 'ti-cloud-off');
+  };
 
   const pendingByFolder=useMemo(()=>{
     const c={};
@@ -264,14 +408,18 @@ function App(){
     const text=entryText.trim();
     if(!text){show('Write something first!','error','ti-alert-circle');return;}
     const fid=activeFolder==='all'?'personal':activeFolder;
+    let nextEntries;
     if(editingId){
-      setEntries(p=>p.map(e=>e.id===editingId?{...e,text,mood:entryMood,updatedAt:Date.now()}:e));
+      nextEntries=entries.map(e=>e.id===editingId?{...e,text,mood:entryMood,updatedAt:Date.now()}:e);
+      setEntries(nextEntries);
       show('Entry updated!','success','ti-check');setEditingId(null);
     }else{
-      setEntries(p=>[{id:uid(),text,mood:entryMood,folderId:fid,createdAt:Date.now()},...p]);
+      nextEntries=[{id:uid(),text,mood:entryMood,folderId:fid,createdAt:Date.now()},...entries];
+      setEntries(nextEntries);
       show('Entry saved!','success','ti-check');
     }
     setEntryText('');setEntryMood('');setAiResult(null);
+    setTimeout(()=>syncToGithub(folders,nextEntries,tasks),100);
   }
 
   function loadEntry(e){
@@ -280,12 +428,23 @@ function App(){
   }
   function cancelEdit(){setEntryText('');setEntryMood('');setEditingId(null);setAiResult(null);}
   function delEntry(id){setConfirmDel({type:'entry',id,msg:'Delete this diary entry? This cannot be undone.'});}
-  function delTask(id){setTasks(p=>p.filter(t=>t.id!==id));show('Task removed','info','ti-trash');}
-  function toggleTask(id){setTasks(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));}
+  function delTask(id){
+    const nextTasks=tasks.filter(t=>t.id!==id);
+    setTasks(nextTasks);
+    show('Task removed','info','ti-trash');
+    setTimeout(()=>syncToGithub(folders,entries,nextTasks),100);
+  }
+  function toggleTask(id){
+    const nextTasks=tasks.map(t=>t.id===id?{...t,done:!t.done}:t);
+    setTasks(nextTasks);
+    setTimeout(()=>syncToGithub(folders,entries,nextTasks),100);
+  }
   function addFolder(){
     const name=newFolder.trim();if(!name)return;
-    setFolders(p=>[...p,{id:'c-'+uid(),name,icon:'ti-folder'}]);
+    const nextFolders=[...folders,{id:'c-'+uid(),name,icon:'ti-folder'}];
+    setFolders(nextFolders);
     setNewFolder('');show(`Folder "${name}" created`,'success','ti-folder-plus');
+    setTimeout(()=>syncToGithub(nextFolders,entries,tasks),100);
   }
   function delFolder(id, e){
     e.stopPropagation();
@@ -296,15 +455,21 @@ function App(){
   function doConfirm(){
     if(!confirmDel)return;
     if(confirmDel.type==='entry'){
-      setEntries(p=>p.filter(e=>e.id!==confirmDel.id));
+      const nextEntries=entries.filter(e=>e.id!==confirmDel.id);
+      setEntries(nextEntries);
       show('Entry deleted','info','ti-trash');
+      setTimeout(()=>syncToGithub(folders,nextEntries,tasks),100);
     }else if(confirmDel.type==='folder'){
       const fid=confirmDel.id;
-      setFolders(p=>p.filter(f=>f.id!==fid));
-      setEntries(p=>p.map(e=>e.folderId===fid?{...e,folderId:'personal'}:e));
-      setTasks(p=>p.map(t=>t.folderId===fid?{...t,folderId:'personal',folderName:'Personal'}:t));
+      const nextFolders=folders.filter(f=>f.id!==fid);
+      const nextEntries=entries.map(e=>e.folderId===fid?{...e,folderId:'personal'}:e);
+      const nextTasks=tasks.map(t=>t.folderId===fid?{...t,folderId:'personal',folderName:'Personal'}:t);
+      setFolders(nextFolders);
+      setEntries(nextEntries);
+      setTasks(nextTasks);
       if(activeFolder===fid){setActiveFolder('all');}
       show('Folder deleted','info','ti-trash');
+      setTimeout(()=>syncToGithub(nextFolders,nextEntries,nextTasks),100);
     }
     setConfirmDel(null);
   }
@@ -375,9 +540,11 @@ function App(){
           tag:['TASK','REMINDER','WAITING','SOMEDAY'].includes(it.tag)?it.tag:'TASK',
           date:it.date||null,folderId:fid,folderName:fname,done:false,createdAt:Date.now()
         }));
-        setTasks(p=>[...newT,...p]);
+        const nextTasks=[...newT,...tasks];
+        setTasks(nextTasks);
         setAiResult({type:'success',msg:`Extracted ${extracted.length} item${extracted.length>1?'s':''}`});
         show(`${extracted.length} task${extracted.length>1?'s':''} extracted!`,'success','ti-sparkles');
+        setTimeout(()=>syncToGithub(folders,entries,nextTasks),100);
       }
     }catch(err){setAiResult({type:'error',msg:err.message});show(err.message,'error','ti-alert-circle');}
     finally{setAiLoading(false);}
@@ -430,9 +597,16 @@ function App(){
               <span className="diary-meta-date">{todayLbl()}</span>
             </div>
           </div>
-          <div className="diary-header-actions">
+          <div className="diary-header-actions" style={{display:'flex',alignItems:'center'}}>
+            {githubToken && githubGistId && (
+              <div style={{display:'inline-flex',alignItems:'center',gap:6,marginRight:12,fontSize:11,color:'var(--text-muted)'}}>
+                <i className={`ti ${syncStatus==='syncing'?'ti-loader spinner':syncStatus==='success'?'ti-cloud':'ti-cloud-off'}`}
+                   style={{color:syncStatus==='success'?'var(--accent)':syncStatus==='syncing'?'var(--accent-light)':'#ef4444',fontSize:15}}></i>
+                <span>{syncStatus==='syncing'?'Syncing...':lastSyncedAt?`Synced ${new Date(lastSyncedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}`:'Not synced'}</span>
+              </div>
+            )}
             {!showApiKey
-              ?<button className="btn btn-ghost" onClick={()=>setShowApiKey(true)} id="show-api-btn"><i className="ti ti-key"></i>AI Setup</button>
+              ?<button className="btn btn-ghost" onClick={()=>setShowApiKey(true)} id="show-api-btn"><i className="ti ti-settings"></i>Settings</button>
               :<button className="btn btn-ghost" onClick={()=>setShowApiKey(false)} id="hide-api-btn"><i className="ti ti-x"></i>Close</button>
             }
           </div>
@@ -448,42 +622,83 @@ function App(){
         <div className="diary-body">
           {showApiKey&&(
             <div className="api-box">
-              <div style={{display:'flex',gap:8,marginBottom:12,borderBottom:'1.5px solid var(--border-light)',paddingBottom:10}}>
-                <button className={`btn ${aiProvider==='gemini'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('gemini')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-gemini-btn">
-                  <i className="ti ti-sparkles"></i>Gemini
+              <div style={{display:'flex',gap:6,marginBottom:14,borderBottom:'1.5px solid var(--border-light)',paddingBottom:8}}>
+                <button className={`btn ${!showSyncSettings?'btn-primary':'btn-ghost'}`} onClick={()=>setShowSyncSettings(false)} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="settings-ai-tab">
+                  <i className="ti ti-sparkles"></i>AI Settings
                 </button>
-                <button className={`btn ${aiProvider==='claude'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('claude')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-claude-btn">
-                  <i className="ti ti-robot"></i>Claude
+                <button className={`btn ${showSyncSettings?'btn-primary':'btn-ghost'}`} onClick={()=>setShowSyncSettings(true)} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="settings-sync-tab">
+                  <i className="ti ti-cloud"></i>GitHub Sync
                 </button>
               </div>
-              {aiProvider==='gemini'?(
+
+              {!showSyncSettings ? (
                 <>
-                  <label><i className="ti ti-sparkles"></i>Gemini API Key</label>
-                  <div className="api-row">
-                    <input id="gemini-key-input" type="password" className="api-in" placeholder="AIzaSy…"
-                      value={geminiKey} onChange={e=>setGeminiKey(e.target.value)}/>
-                    <button className="btn btn-primary" id="save-gemini-btn"
-                      onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey});setShowApiKey(false);show('Gemini API key saved','success','ti-check');}}>
-                      <i className="ti ti-device-floppy"></i>Save
+                  <div style={{display:'flex',gap:8,marginBottom:12,borderBottom:'1.5px solid var(--border-light)',paddingBottom:10}}>
+                    <button className={`btn ${aiProvider==='gemini'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('gemini')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-gemini-btn">
+                      <i className="ti ti-sparkles"></i>Gemini
+                    </button>
+                    <button className={`btn ${aiProvider==='claude'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('claude')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-claude-btn">
+                      <i className="ti ti-robot"></i>Claude
                     </button>
                   </div>
-                  <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
-                    Stored locally. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Google AI Studio</a>.
-                  </p>
+                  {aiProvider==='gemini'?(
+                    <>
+                      <label><i className="ti ti-sparkles"></i>Gemini API Key</label>
+                      <div className="api-row">
+                        <input id="gemini-key-input" type="password" className="api-in" placeholder="AIzaSy…"
+                          value={geminiKey} onChange={e=>setGeminiKey(e.target.value)}/>
+                        <button className="btn btn-primary" id="save-gemini-btn"
+                          onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey,githubToken,githubGistId,lastSyncedAt});setShowApiKey(false);show('Gemini API key saved','success','ti-check');}}>
+                          <i className="ti ti-device-floppy"></i>Save
+                        </button>
+                      </div>
+                      <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
+                        Stored locally. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Google AI Studio</a>.
+                      </p>
+                    </>
+                  ):(
+                    <>
+                      <label><i className="ti ti-robot"></i>Claude API Key</label>
+                      <div className="api-row">
+                        <input id="claude-key-input" type="password" className="api-in" placeholder="sk-ant-api03-…"
+                          value={claudeKey} onChange={e=>setClaudeKey(e.target.value)}/>
+                        <button className="btn btn-primary" id="save-claude-btn"
+                          onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey,githubToken,githubGistId,lastSyncedAt});setShowApiKey(false);show('Claude API key saved','success','ti-check');}}>
+                          <i className="ti ti-device-floppy"></i>Save
+                        </button>
+                      </div>
+                      <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
+                        Stored locally. Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Anthropic Console</a>.
+                      </p>
+                    </>
+                  )}
                 </>
-              ):(
+              ) : (
                 <>
-                  <label><i className="ti ti-robot"></i>Claude API Key</label>
-                  <div className="api-row">
-                    <input id="claude-key-input" type="password" className="api-in" placeholder="sk-ant-api03-…"
-                      value={claudeKey} onChange={e=>setClaudeKey(e.target.value)}/>
-                    <button className="btn btn-primary" id="save-claude-btn"
-                      onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey});setShowApiKey(false);show('Claude API key saved','success','ti-check');}}>
-                      <i className="ti ti-device-floppy"></i>Save
-                    </button>
+                  <label><i className="ti ti-key"></i>GitHub Access Token</label>
+                  <div className="api-row" style={{marginBottom:10}}>
+                    <input id="github-token-input" type="password" className="api-in" placeholder="ghp_..."
+                      value={tempGithubToken} onChange={e=>setTempGithubToken(e.target.value)}/>
+                    {githubToken ? (
+                      <button className="btn btn-danger" onClick={disableGithubSync} id="disable-sync-btn">
+                        <i className="ti ti-cloud-off"></i>Disable
+                      </button>
+                    ) : (
+                      <button className="btn btn-primary" onClick={() => initializeGithubSync(tempGithubToken)} id="enable-sync-btn" disabled={!tempGithubToken.trim() || syncStatus === 'syncing'}>
+                        {syncStatus === 'syncing' ? <span className="dots"><span></span><span></span><span></span></span> : <><i className="ti ti-cloud-upload"></i>Enable</>}
+                      </button>
+                    )}
                   </div>
-                  <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
-                    Stored locally. Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Anthropic Console</a>.
+                  {githubToken && (
+                    <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8,fontSize:11,color:'var(--text-muted)'}}>
+                      <span style={{flex:1}}>Gist ID: <code style={{background:'var(--bg)',padding:'2px 4px',borderRadius:3}}>{githubGistId.slice(0,10)}...</code></span>
+                      <button className="btn btn-ghost" onClick={() => syncToGithub()} style={{padding:'4px 8px',fontSize:10}} disabled={syncStatus === 'syncing'}>
+                        <i className="ti ti-refresh"></i>Sync Now
+                      </button>
+                    </div>
+                  )}
+                  <p style={{fontSize:11,color:'var(--text-muted)',marginTop:8,lineHeight:1.4}}>
+                    Allows saving and syncing entries automatically to a private GitHub Gist. Create a token with <b>gist</b> scope at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>GitHub Settings</a>.
                   </p>
                 </>
               )}
