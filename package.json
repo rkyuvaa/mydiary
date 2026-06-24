@@ -1,0 +1,12 @@
+{
+  "name": "mydiary",
+  "version": "1.0.0",
+  "description": "My Diary Personal Journal with Netlify Blobs storage",
+  "main": "index.html",
+  "dependencies": {
+    "@netlify/blobs": "^2.2.0"
+  },
+  "scripts": {
+    "build": "echo 'Build complete'"
+  }
+}
