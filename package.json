@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "My Diary Personal Journal with Netlify Blobs storage",
   "main": "index.html",
+  "type": "module",
   "dependencies": {
     "@netlify/blobs": "^10.0.0"
   },

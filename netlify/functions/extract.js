@@ -1,5 +1,12 @@
 import { getStore } from '@netlify/blobs';
 
+const withTimeout = (promise, timeoutMs = 2500) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Storage request timed out')), timeoutMs))
+  ]);
+};
+
 export default async (req, context) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
   // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
@@ -29,12 +36,12 @@ export default async (req, context) => {
   let state = {};
   try {
     const store = getStore('diary-store');
-    const rawState = await store.get('state');
+    const rawState = await withTimeout(store.get('state'));
     if (rawState) {
       state = JSON.parse(rawState);
     }
   } catch (e) {
-    console.error('Error fetching state from Netlify Blobs:', e);
+    console.error('Error fetching state from Netlify Blobs (continuing with env fallback):', e.message);
   }
 
   try {
