@@ -1,6 +1,6 @@
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
-module.exports = async (req, context) => {
+export default async (req: Request, context: any) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
   // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
   if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -41,7 +41,7 @@ module.exports = async (req, context) => {
     } else {
       return new Response('Method Not Allowed', { status: 405 });
     }
-  } catch (err) {
+  } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: {
