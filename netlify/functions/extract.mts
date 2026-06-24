@@ -1,4 +1,5 @@
-import { getStore } from '@netlify/blobs';
+import blobs from '@netlify/blobs';
+const getStore = blobs.getStore;
 
 export default async (req: Request, context: any) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
