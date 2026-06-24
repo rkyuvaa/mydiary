@@ -1,10 +1,9 @@
 const { getStore } = require('@netlify/blobs');
 
 exports.handler = async (event, context) => {
-  // Create or retrieve the store named 'diary-store'
-  const store = getStore('diary-store');
-
   try {
+    // Create or retrieve the store named 'diary-store'
+    const store = getStore('diary-store');
     if (event.httpMethod === 'GET') {
       const data = await store.get('state');
       return {
