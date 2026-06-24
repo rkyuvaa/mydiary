@@ -2,10 +2,7 @@ const { getStore } = require('@netlify/blobs');
 
 exports.handler = async (event, context) => {
   // Create or retrieve the store named 'diary-store'
-  const store = getStore({
-    name: 'diary-store',
-    // Netlify Blobs automatically links deploy credentials when running in production.
-  });
+  const store = getStore('diary-store');
 
   try {
     if (event.httpMethod === 'GET') {
