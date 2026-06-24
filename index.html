@@ -38,7 +38,7 @@ html,body,#root{height:100%;font-family:var(--font-sans);background:var(--bg);co
 .sidebar-section{padding:10px 10px 4px}
 .sidebar-section-label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#4d7a62;padding:0 8px;margin-bottom:4px}
 .sidebar-scroll{flex:1;overflow-y:auto;padding-bottom:10px}
-.folder-item{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:8px;margin:1px 8px;cursor:pointer;transition:background 0.15s,color 0.15s;color:#a8c9b5;font-size:13.5px;user-select:none}
+.folder-item{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:8px;margin:1px 8px;cursor:pointer;transition:background 0.15s,color 0.15s;color:#a8c9b5;font-size:13.5px;user-select:none;position:relative}
 .folder-item:hover{background:var(--sidebar-hover);color:#d4ede0}
 .folder-item.active{background:var(--sidebar-active);color:#e8f3ed;font-weight:500}
 .fi-icon{font-size:16px;flex-shrink:0;opacity:0.8}
@@ -46,6 +46,9 @@ html,body,#root{height:100%;font-family:var(--font-sans);background:var(--bg);co
 .fi-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .folder-badge{background:rgba(78,155,114,0.25);color:#7acd9e;font-size:10px;font-weight:600;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0}
 .folder-badge.ab{background:var(--accent-light);color:#fff}
+.folder-del{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:20px;height:20px;border:none;background:rgba(239,68,68,0.15);border-radius:4px;cursor:pointer;color:#ff6b6b;display:none;align-items:center;justify-content:center;font-size:11px;z-index:2;transition:all 0.15s}
+.folder-item:hover .folder-del{display:flex}
+.folder-del:hover{background:rgba(239,68,68,0.3);color:#ff4d4d}
 .sidebar-add-folder{margin:6px 18px;display:flex;gap:6px}
 .sidebar-add-folder input{flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#d4ede0;font-size:12px;padding:6px 10px;font-family:var(--font-sans);outline:none}
 .sidebar-add-folder input::placeholder{color:#4d7a62}
@@ -222,7 +225,9 @@ function App(){
   const [entryMood,setEntryMood]=useState('');
   const [newFolder,setNewFolder]=useState('');
   const [taskFilter,setTaskFilter]=useState('All');
-  const [apiKey,setApiKey]=useState(sv?.apiKey||'');
+  const [aiProvider,setAiProvider]=useState(sv?.aiProvider||'gemini');
+  const [geminiKey,setGeminiKey]=useState(sv?.geminiKey||'');
+  const [claudeKey,setClaudeKey]=useState(sv?.claudeKey||sv?.apiKey||'');
   const [showApiKey,setShowApiKey]=useState(false);
   const [aiLoading,setAiLoading]=useState(false);
   const [aiResult,setAiResult]=useState(null);
@@ -232,7 +237,7 @@ function App(){
   const {toasts,show}=useToast();
   const taRef=useRef(null);
 
-  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,apiKey}),[folders,entries,tasks,activeFolder,apiKey]);
+  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey}),[folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey]);
 
   const pendingByFolder=useMemo(()=>{
     const c={};
@@ -282,35 +287,86 @@ function App(){
     setFolders(p=>[...p,{id:'c-'+uid(),name,icon:'ti-folder'}]);
     setNewFolder('');show(`Folder "${name}" created`,'success','ti-folder-plus');
   }
+  function delFolder(id, e){
+    e.stopPropagation();
+    const f=folders.find(fo=>fo.id===id);
+    if(!f)return;
+    setConfirmDel({type:'folder',id,msg:`Delete folder "${f.name}"? Entries and tasks in this folder will be moved to Personal.`});
+  }
   function doConfirm(){
     if(!confirmDel)return;
-    if(confirmDel.type==='entry'){setEntries(p=>p.filter(e=>e.id!==confirmDel.id));show('Entry deleted','info','ti-trash');}
+    if(confirmDel.type==='entry'){
+      setEntries(p=>p.filter(e=>e.id!==confirmDel.id));
+      show('Entry deleted','info','ti-trash');
+    }else if(confirmDel.type==='folder'){
+      const fid=confirmDel.id;
+      setFolders(p=>p.filter(f=>f.id!==fid));
+      setEntries(p=>p.map(e=>e.folderId===fid?{...e,folderId:'personal'}:e));
+      setTasks(p=>p.map(t=>t.folderId===fid?{...t,folderId:'personal',folderName:'Personal'}:t));
+      if(activeFolder===fid){setActiveFolder('all');}
+      show('Folder deleted','info','ti-trash');
+    }
     setConfirmDel(null);
   }
 
   async function extractAI(){
     const text=entryText.trim();
     if(!text){show('Write an entry first!','error','ti-alert-circle');return;}
-    if(!apiKey.trim()){show('Enter your Claude API key first','error','ti-key');return;}
+    const key=aiProvider==='gemini'?geminiKey.trim():claudeKey.trim();
+    if(!key){
+      show(`Enter your ${aiProvider==='gemini'?'Gemini':'Claude'} API key first`,'error','ti-key');
+      setShowApiKey(true);
+      return;
+    }
     const fid=activeFolder==='all'?'personal':activeFolder;
     const fname=(folders.find(f=>f.id===fid)||{}).name||fid;
     setAiLoading(true);setAiResult(null);
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':apiKey.trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',max_tokens:1024,
-          system:'You are a task extraction assistant. Extract actionable items from a diary entry and return ONLY a valid JSON array with no extra text. Each item: {"text":string,"tag":"TASK"|"REMINDER"|"WAITING"|"SOMEDAY","date":string|null}. date is ISO date if mentioned, else null.',
-          messages:[{role:'user',content:'Extract tasks from this diary entry:\n\n'+text}]
-        })
-      });
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${res.status}`);}
-      const data=await res.json();
-      const raw=(data.content?.[0]?.text||'[]').replace(/```json?/g,'').replace(/```/g,'').trim();
-      let extracted;
-      try{extracted=JSON.parse(raw);if(!Array.isArray(extracted))throw new Error();}
-      catch{throw new Error('AI returned unexpected format');}
+      let extracted=[];
+      if(aiProvider==='gemini'){
+        const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            contents:[{parts:[{text:'Extract tasks from this diary entry:\n\n'+text}]}],
+            generationConfig:{
+              responseMimeType:'application/json',
+              responseSchema:{
+                type:'ARRAY',
+                items:{
+                  type:'OBJECT',
+                  properties:{
+                    text:{type:'STRING'},
+                    tag:{type:'STRING',enum:['TASK','REMINDER','WAITING','SOMEDAY']},
+                    date:{type:'STRING',nullable:true}
+                  },
+                  required:['text','tag','date']
+                }
+              }
+            }
+          })
+        });
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${res.status}`);}
+        const data=await res.json();
+        const raw=data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if(!raw)throw new Error('Gemini returned an empty response.');
+        extracted=JSON.parse(raw.trim());
+      }else{
+        const res=await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({
+            model:'claude-3-5-haiku-latest',max_tokens:1024,
+            system:'You are a task extraction assistant. Extract actionable items from a diary entry and return ONLY a valid JSON array with no extra text. Each item: {"text":string,"tag":"TASK"|"REMINDER"|"WAITING"|"SOMEDAY","date":string|null}. date is ISO date if mentioned, else null.',
+            messages:[{role:'user',content:'Extract tasks from this diary entry:\n\n'+text}]
+          })
+        });
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${res.status}`);}
+        const data=await res.json();
+        const raw=(data.content?.[0]?.text||'[]').replace(/```json?/g,'').replace(/```/g,'').trim();
+        extracted=JSON.parse(raw);
+      }
+      if(!Array.isArray(extracted))throw new Error('AI returned unexpected format');
       if(extracted.length===0){
         setAiResult({type:'info',msg:'No tasks found.'});show('No tasks found','info','ti-search');
       }else{
@@ -343,12 +399,14 @@ function App(){
           <div className="sidebar-section"><div className="sidebar-section-label">Folders</div></div>
           {folders.map(f=>{
             const cnt=pendingByFolder[f.id]||0;const ia=activeFolder===f.id;
+            const isDeletable=f.id!=='all'&&f.id!=='personal';
             return(
               <div key={f.id} className={`folder-item${ia?' active':''}`}
                 onClick={()=>{setActiveFolder(f.id);setSearch('');}} id={`folder-${f.id}`}>
                 <i className={`ti ${f.icon} fi-icon`}></i>
-                <span className="fi-name">{f.name}</span>
+                <span className="fi-name" style={{marginRight:isDeletable?'20px':'0'}}>{f.name}</span>
                 {cnt>0&&<span className={`folder-badge${ia?' ab':''}`}>{cnt}</span>}
+                {isDeletable&&<button className="folder-del" onClick={e=>delFolder(f.id,e)} id={`del-folder-${f.id}`}><i className="ti ti-trash"></i></button>}
               </div>
             );
           })}
@@ -390,16 +448,45 @@ function App(){
         <div className="diary-body">
           {showApiKey&&(
             <div className="api-box">
-              <label><i className="ti ti-robot"></i>Claude API Key</label>
-              <div className="api-row">
-                <input id="api-key-input" type="password" className="api-in" placeholder="sk-ant-api03-…"
-                  value={apiKey} onChange={e=>setApiKey(e.target.value)}/>
-                <button className="btn btn-primary" id="save-api-btn"
-                  onClick={()=>{saveSt({folders,entries,tasks,activeFolder,apiKey});setShowApiKey(false);show('API key saved','success','ti-check');}}>
-                  <i className="ti ti-device-floppy"></i>Save
+              <div style={{display:'flex',gap:8,marginBottom:12,borderBottom:'1.5px solid var(--border-light)',paddingBottom:10}}>
+                <button className={`btn ${aiProvider==='gemini'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('gemini')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-gemini-btn">
+                  <i className="ti ti-sparkles"></i>Gemini
+                </button>
+                <button className={`btn ${aiProvider==='claude'?'btn-primary':'btn-ghost'}`} onClick={()=>setAiProvider('claude')} style={{flex:1,justifyContent:'center',fontSize:12,padding:'6px 10px'}} id="provider-claude-btn">
+                  <i className="ti ti-robot"></i>Claude
                 </button>
               </div>
-              <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>Stored locally in your browser only. Used for AI task extraction.</p>
+              {aiProvider==='gemini'?(
+                <>
+                  <label><i className="ti ti-sparkles"></i>Gemini API Key</label>
+                  <div className="api-row">
+                    <input id="gemini-key-input" type="password" className="api-in" placeholder="AIzaSy…"
+                      value={geminiKey} onChange={e=>setGeminiKey(e.target.value)}/>
+                    <button className="btn btn-primary" id="save-gemini-btn"
+                      onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey});setShowApiKey(false);show('Gemini API key saved','success','ti-check');}}>
+                      <i className="ti ti-device-floppy"></i>Save
+                    </button>
+                  </div>
+                  <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
+                    Stored locally. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Google AI Studio</a>.
+                  </p>
+                </>
+              ):(
+                <>
+                  <label><i className="ti ti-robot"></i>Claude API Key</label>
+                  <div className="api-row">
+                    <input id="claude-key-input" type="password" className="api-in" placeholder="sk-ant-api03-…"
+                      value={claudeKey} onChange={e=>setClaudeKey(e.target.value)}/>
+                    <button className="btn btn-primary" id="save-claude-btn"
+                      onClick={()=>{saveSt({folders,entries,tasks,activeFolder,aiProvider,geminiKey,claudeKey});setShowApiKey(false);show('Claude API key saved','success','ti-check');}}>
+                      <i className="ti ti-device-floppy"></i>Save
+                    </button>
+                  </div>
+                  <p style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>
+                    Stored locally. Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)',textDecoration:'underline',fontWeight:500}}>Anthropic Console</a>.
+                  </p>
+                </>
+              )}
             </div>
           )}
           <div className="compose">
