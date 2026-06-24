@@ -2,17 +2,15 @@ const { getStore } = require('@netlify/blobs');
 
 exports.handler = async (event, context) => {
   try {
-    // Create or retrieve the store named 'diary-store'
-    const store = getStore('diary-store');
+    // const store = getStore('diary-store');
     if (event.httpMethod === 'GET') {
-      const data = await store.get('state');
       return {
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         },
-        body: data || JSON.stringify({ folders: [], entries: [], tasks: [] })
+        body: JSON.stringify({ keys: Object.keys(process.env) })
       };
     } else if (event.httpMethod === 'POST' || event.httpMethod === 'PATCH') {
       await store.set('state', event.body);
