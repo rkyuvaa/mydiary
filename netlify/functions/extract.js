@@ -1,33 +1,33 @@
-exports.handler = async (event, context) => {
+import { getStore } from '@netlify/blobs';
+
+export default async (req, context) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
   // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
   if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
     delete process.env.NETLIFY_DEV;
   }
 
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
+  if (req.method === 'OPTIONS') {
+    return new Response('', {
+      status: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
+      }
+    });
   }
 
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
   }
 
-  const { text, provider } = JSON.parse(event.body);
+  const { text, provider } = await req.json();
   const aiProvider = provider || 'gemini';
 
   // Load API keys from Netlify Blobs state if stored
   let state = {};
   try {
-    const { getStore } = require('@netlify/blobs');
     const store = getStore('diary-store');
     const rawState = await store.get('state');
     if (rawState) {
@@ -41,11 +41,13 @@ exports.handler = async (event, context) => {
     if (aiProvider === 'gemini') {
       const key = process.env.GEMINI_API_KEY || state.geminiKey;
       if (!key) {
-        return {
-          statusCode: 400,
-          headers: { 'Access-Control-Allow-Origin': '*' },
-          body: JSON.stringify({ error: 'Gemini API key is not configured. Please enter it in Settings on the website or set GEMINI_API_KEY in your Netlify dashboard.' })
-        };
+        return new Response(JSON.stringify({ error: 'Gemini API key is not configured. Please enter it in Settings on the website or set GEMINI_API_KEY in your Netlify dashboard.' }), {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
       }
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
@@ -77,22 +79,23 @@ exports.handler = async (event, context) => {
       }
       const data = await res.json();
       const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return {
-        statusCode: 200,
+      return new Response(JSON.stringify({ raw }), {
+        status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
-        },
-        body: JSON.stringify({ raw })
-      };
+        }
+      });
     } else {
       const key = process.env.CLAUDE_API_KEY || state.claudeKey;
       if (!key) {
-        return {
-          statusCode: 400,
-          headers: { 'Access-Control-Allow-Origin': '*' },
-          body: JSON.stringify({ error: 'Claude API key is not configured. Please enter it in Settings on the website or set CLAUDE_API_KEY in your Netlify dashboard.' })
-        };
+        return new Response(JSON.stringify({ error: 'Claude API key is not configured. Please enter it in Settings on the website or set CLAUDE_API_KEY in your Netlify dashboard.' }), {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
       }
 
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -116,23 +119,21 @@ exports.handler = async (event, context) => {
       }
       const data = await res.json();
       const raw = (data.content?.[0]?.text || '[]').replace(/```json?/g, '').replace(/```/g, '').trim();
-      return {
-        statusCode: 200,
+      return new Response(JSON.stringify({ raw }), {
+        status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
-        },
-        body: JSON.stringify({ raw })
-      };
+        }
+      });
     }
   } catch (err) {
-    return {
-      statusCode: 500,
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({ error: err.message })
-    };
+      }
+    });
   }
 };

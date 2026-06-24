@@ -1,6 +1,6 @@
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
-exports.handler = async (event, context) => {
+export default async (req, context) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
   // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
   if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -8,49 +8,46 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Create or retrieve the store named 'diary-store'
     const store = getStore('diary-store');
-    if (event.httpMethod === 'GET') {
+
+    if (req.method === 'GET') {
       const data = await store.get('state');
-      return {
-        statusCode: 200,
+      return new Response(data || JSON.stringify({ folders: [], entries: [], tasks: [] }), {
+        status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
-        },
-        body: data || JSON.stringify({ folders: [], entries: [], tasks: [] })
-      };
-    } else if (event.httpMethod === 'POST' || event.httpMethod === 'PATCH') {
-      await store.set('state', event.body);
-      return {
-        statusCode: 200,
+        }
+      });
+    } else if (req.method === 'POST' || req.method === 'PATCH') {
+      const bodyText = await req.text();
+      await store.set('state', bodyText);
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
-        },
-        body: JSON.stringify({ success: true })
-      };
-    } else if (event.httpMethod === 'OPTIONS') {
-      return {
-        statusCode: 200,
+        }
+      });
+    } else if (req.method === 'OPTIONS') {
+      return new Response('', {
+        status: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS'
-        },
-        body: ''
-      };
+        }
+      });
     } else {
-      return { statusCode: 405, body: 'Method Not Allowed' };
+      return new Response('Method Not Allowed', { status: 405 });
     }
   } catch (err) {
-    return {
-      statusCode: 500,
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({ error: err.message })
-    };
+      }
+    });
   }
 };
