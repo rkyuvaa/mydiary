@@ -1,8 +1,6 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
-export default async (req: Request, context: any) => {
+export default async (req, context) => {
   // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
   // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
   if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -28,7 +26,7 @@ export default async (req: Request, context: any) => {
   const aiProvider = provider || 'gemini';
 
   // Load API keys from Netlify Blobs state if stored
-  let state: any = {};
+  let state = {};
   try {
     const store = getStore('diary-store');
     const rawState = await store.get('state');
@@ -129,7 +127,7 @@ export default async (req: Request, context: any) => {
         }
       });
     }
-  } catch (err: any) {
+  } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: {
