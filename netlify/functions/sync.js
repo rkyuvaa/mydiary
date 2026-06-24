@@ -1,16 +1,24 @@
 const { getStore } = require('@netlify/blobs');
 
 exports.handler = async (event, context) => {
+  // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
+  // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
+  if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    delete process.env.NETLIFY_DEV;
+  }
+
   try {
-    // const store = getStore('diary-store');
+    // Create or retrieve the store named 'diary-store'
+    const store = getStore('diary-store');
     if (event.httpMethod === 'GET') {
+      const data = await store.get('state');
       return {
         statusCode: 200,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         },
-        body: JSON.stringify({ keys: Object.keys(process.env) })
+        body: data || JSON.stringify({ folders: [], entries: [], tasks: [] })
       };
     } else if (event.httpMethod === 'POST' || event.httpMethod === 'PATCH') {
       await store.set('state', event.body);

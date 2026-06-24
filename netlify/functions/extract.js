@@ -1,4 +1,10 @@
 exports.handler = async (event, context) => {
+  // If NETLIFY_DEV is set in Netlify's production environment variables (e.g. by mistake),
+  // it forces the SDK to look for local emulation. Deleting it allows production Blobs to work.
+  if (process.env.NETLIFY_DEV && process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    delete process.env.NETLIFY_DEV;
+  }
+
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
