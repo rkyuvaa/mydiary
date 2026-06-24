@@ -228,6 +228,8 @@ function App(){
   const [newFolder,setNewFolder]=useState('');
   const [taskFilter,setTaskFilter]=useState('All');
   const [aiProvider,setAiProvider]=useState(sv?.aiProvider||'gemini');
+  const [geminiKey,setGeminiKey]=useState(sv?.geminiKey||'');
+  const [claudeKey,setClaudeKey]=useState(sv?.claudeKey||'');
   const [syncStatus,setSyncStatus]=useState('idle');
   const [lastSyncedAt,setLastSyncedAt]=useState(sv?.lastSyncedAt||null);
   const [showSettings,setShowSettings]=useState(false);
@@ -239,15 +241,17 @@ function App(){
   const {toasts,show}=useToast();
   const taRef=useRef(null);
 
-  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt}),[folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt]);
+  useEffect(()=>saveSt({folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt,geminiKey,claudeKey}),[folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt,geminiKey,claudeKey]);
 
-  const syncToCloud = useCallback(async (customFolders, customEntries, customTasks) => {
+  const syncToCloud = useCallback(async (customFolders, customEntries, customTasks, customGeminiKey, customClaudeKey) => {
     setSyncStatus('syncing');
     try {
       const stateToSave = {
         folders: customFolders || folders,
         entries: customEntries || entries,
-        tasks: customTasks || tasks
+        tasks: customTasks || tasks,
+        geminiKey: customGeminiKey !== undefined ? customGeminiKey : geminiKey,
+        claudeKey: customClaudeKey !== undefined ? customClaudeKey : claudeKey
       };
       const res = await fetch('/.netlify/functions/sync', {
         method: 'POST',
@@ -264,7 +268,7 @@ function App(){
         show('Sync to cloud failed: ' + err.message, 'error', 'ti-cloud-off');
       }
     }
-  }, [folders, entries, tasks, show]);
+  }, [folders, entries, tasks, geminiKey, claudeKey, show]);
 
   useEffect(() => {
     const autoPull = async () => {
@@ -273,10 +277,12 @@ function App(){
         const res = await fetch('/.netlify/functions/sync');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const remoteState = await res.json();
-        if (remoteState && (remoteState.entries?.length || remoteState.tasks?.length || remoteState.folders?.length)) {
+        if (remoteState && (remoteState.entries?.length || remoteState.tasks?.length || remoteState.folders?.length || remoteState.geminiKey || remoteState.claudeKey)) {
           if (remoteState.folders) setFolders(remoteState.folders);
           if (remoteState.entries) setEntries(remoteState.entries);
           if (remoteState.tasks) setTasks(remoteState.tasks);
+          if (remoteState.geminiKey) setGeminiKey(remoteState.geminiKey);
+          if (remoteState.claudeKey) setClaudeKey(remoteState.claudeKey);
           setLastSyncedAt(Date.now());
           setSyncStatus('success');
           show('Journal synced with Netlify Cloud!', 'success', 'ti-cloud');
@@ -501,9 +507,21 @@ function App(){
                   <i className="ti ti-robot"></i>Anthropic Claude
                 </button>
               </div>
+              <div style={{marginBottom:12}}>
+                <label style={{fontSize:12,fontWeight:600,color:'var(--text-muted)',marginBottom:4,display:'block'}}>Gemini API Key</label>
+                <input type="password" className="api-in" style={{fontSize:12,padding:'6px 10px',width:'100%'}} placeholder="Enter Gemini API Key..." value={geminiKey}
+                  onChange={e=>{setGeminiKey(e.target.value);saveSt({folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt,geminiKey:e.target.value,claudeKey});}}
+                  onBlur={()=>syncToCloud(folders,entries,tasks,geminiKey,claudeKey)} id="gemini-key-input"/>
+              </div>
+              <div style={{marginBottom:12}}>
+                <label style={{fontSize:12,fontWeight:600,color:'var(--text-muted)',marginBottom:4,display:'block'}}>Claude API Key</label>
+                <input type="password" className="api-in" style={{fontSize:12,padding:'6px 10px',width:'100%'}} placeholder="Enter Claude API Key..." value={claudeKey}
+                  onChange={e=>{setClaudeKey(e.target.value);saveSt({folders,entries,tasks,activeFolder,aiProvider,lastSyncedAt,geminiKey,claudeKey:e.target.value});}}
+                  onBlur={()=>syncToCloud(folders,entries,tasks,geminiKey,claudeKey)} id="claude-key-input"/>
+              </div>
               <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.4}}>
-                <p style={{marginBottom:4}}><b>Netlify Cloud Sync is active</b>. All changes are synchronized automatically with Netlify Blobs.</p>
-                <p>Ensure that you have set the <code>GEMINI_API_KEY</code> or <code>CLAUDE_API_KEY</code> environment variables in your Netlify dashboard for AI features to work.</p>
+                <p style={{marginBottom:4}}><b>Netlify Cloud Sync is active</b>. All changes and configured API keys are synchronized automatically with Netlify Blobs.</p>
+                <p>Keys are securely stored in your personal Netlify database. Alternatively, you can configure <code>GEMINI_API_KEY</code> or <code>CLAUDE_API_KEY</code> environment variables directly in Netlify.</p>
               </div>
               <div style={{display:'flex',justifyContent:'flex-end',marginTop:14}}>
                 <button className="btn btn-primary" onClick={() => syncToCloud()} disabled={syncStatus === 'syncing'} style={{fontSize:11,padding:'6px 12px'}}>

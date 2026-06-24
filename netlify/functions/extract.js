@@ -18,14 +18,27 @@ exports.handler = async (event, context) => {
   const { text, provider } = JSON.parse(event.body);
   const aiProvider = provider || 'gemini';
 
+  // Load API keys from Netlify Blobs state if stored
+  let state = {};
+  try {
+    const { getStore } = require('@netlify/blobs');
+    const store = getStore('diary-store');
+    const rawState = await store.get('state');
+    if (rawState) {
+      state = JSON.parse(rawState);
+    }
+  } catch (e) {
+    console.error('Error fetching state from Netlify Blobs:', e);
+  }
+
   try {
     if (aiProvider === 'gemini') {
-      const key = process.env.GEMINI_API_KEY;
+      const key = process.env.GEMINI_API_KEY || state.geminiKey;
       if (!key) {
         return {
           statusCode: 400,
           headers: { 'Access-Control-Allow-Origin': '*' },
-          body: JSON.stringify({ error: 'Gemini API key is not configured on the server. Please set GEMINI_API_KEY in Netlify settings.' })
+          body: JSON.stringify({ error: 'Gemini API key is not configured. Please enter it in Settings on the website or set GEMINI_API_KEY in your Netlify dashboard.' })
         };
       }
 
@@ -67,12 +80,12 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ raw })
       };
     } else {
-      const key = process.env.CLAUDE_API_KEY;
+      const key = process.env.CLAUDE_API_KEY || state.claudeKey;
       if (!key) {
         return {
           statusCode: 400,
           headers: { 'Access-Control-Allow-Origin': '*' },
-          body: JSON.stringify({ error: 'Claude API key is not configured on the server. Please set CLAUDE_API_KEY in Netlify settings.' })
+          body: JSON.stringify({ error: 'Claude API key is not configured. Please enter it in Settings on the website or set CLAUDE_API_KEY in your Netlify dashboard.' })
         };
       }
 
